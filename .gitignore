@@ -1,0 +1,42 @@
+# ==================== Python ====================
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+
+# ==================== 虚拟环境 ====================
+venv/
+.venv/
+env/
+ENV/
+
+# ==================== PyInstaller 构建产物 ====================
+build/
+dist/
+*.manifest
+
+# ==================== 非 Windows 平台文件（本仓库只收录 Windows 版） ====================
+*_mac.py
+*_mac.spec
+*_mac.txt
+pack_hook_mac.py
+
+# ==================== 运行期生成的文件 ====================
+# GUI 配置文件（每位使用者自己生成，含个人关键词设置）
+gui_config.json
+# 收藏日志等运行日志
+*.log
+
+# ==================== 编辑器 / 系统 ====================
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ==================== 本地工作元数据 ====================
+.workbuddy/
