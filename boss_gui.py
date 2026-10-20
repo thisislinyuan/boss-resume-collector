@@ -40,7 +40,58 @@ except Exception:
     HAS_KEYBOARD = False
 
 
-CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'gui_config.json')
+def _dir_writable(d):
+    """测试目录是否真的可写（实际创建并删除一个临时文件来判定）"""
+    try:
+        os.makedirs(d, exist_ok=True)
+        probe = os.path.join(d, '.write_test.tmp')
+        with open(probe, 'w') as f:
+            f.write('1')
+        os.remove(probe)
+        return True
+    except Exception:
+        return False
+
+
+def _resolve_config_path():
+    """
+    确定配置文件路径。
+
+    关键：打包成单文件 exe 后，__file__ 指向 PyInstaller 解压到 %TEMP% 下的
+    临时目录（_MEIxxxxxx），该目录在程序退出时会被整个删除。
+    如果沿用 os.path.dirname(__file__) 存配置，每次保存都会写进这个临时目录，
+    于是"应用关键词"看似成功、下次启动却总是回到默认设置。
+    所以打包后必须改用 sys.executable（exe 自身所在目录）来定位配置文件。
+    """
+    if getattr(sys, 'frozen', False):
+        base = os.path.dirname(os.path.abspath(sys.executable))
+    else:
+        base = os.path.dirname(os.path.abspath(__file__))
+
+    primary = os.path.join(base, 'gui_config.json')
+    if os.path.exists(primary) or _dir_writable(base):
+        return primary
+
+    # exe 放在 Program Files 之类无写权限的位置时，回落到用户主目录
+    try:
+        fallback_dir = os.path.join(os.path.expanduser('~'), 'BOSS_ResumeCollector')
+        os.makedirs(fallback_dir, exist_ok=True)
+        return os.path.join(fallback_dir, 'gui_config.json')
+    except Exception:
+        return primary
+
+
+# 延迟解析：首次使用时才确定路径，避免 import 时的副作用
+_CONFIG_FILE_CACHE = None
+
+
+def config_path():
+    """返回配置文件路径（首次调用时解析并缓存）"""
+    global _CONFIG_FILE_CACHE
+    if _CONFIG_FILE_CACHE is None:
+        _CONFIG_FILE_CACHE = _resolve_config_path()
+    return _CONFIG_FILE_CACHE
+
 
 DEFAULT_CONFIG = {
     'company_keywords': '华为、华为技术有限公司、华为云、华为终端',
@@ -127,27 +178,32 @@ class MainWindow(QMainWindow):
         self._timer.timeout.connect(self._sync_ui)
         self._timer.start(100)
 
+        print(f'[配置] 配置文件: {config_path()}')
         print('[系统] 界面已就绪，请先检查下方关键词与快捷键，再点击「启动脚本」')
 
     # ==================== 配置读写 ====================
 
     def _load_config(self):
         cfg = dict(DEFAULT_CONFIG)
-        if os.path.exists(CONFIG_FILE):
+        path = config_path()
+        if os.path.exists(path):
             try:
-                with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+                with open(path, 'r', encoding='utf-8') as f:
                     data = json.load(f)
                 cfg.update(data)
-            except Exception:
-                pass
+            except Exception as e:
+                print(f'[配置] 读取失败（将使用默认设置）: {e}')
         return cfg
 
     def _save_config(self):
+        path = config_path()
         try:
-            with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
+            with open(path, 'w', encoding='utf-8') as f:
                 json.dump(self.config, f, ensure_ascii=False, indent=2)
+            return True
         except Exception as e:
             print(f'[配置] 保存失败: {e}')
+            return False
 
     # ==================== UI 构建 ====================
 
@@ -178,6 +234,11 @@ class MainWindow(QMainWindow):
         kw_btn_row.addWidget(self.btn_default)
         kw_btn_row.addStretch(1)
         kw_layout.addLayout(kw_btn_row)
+        # 显示配置文件真实位置，方便排查"设置了却不保存"的问题
+        self.cfg_path_label = QLabel(f'配置文件: {config_path()}')
+        self.cfg_path_label.setWordWrap(True)
+        self.cfg_path_label.setStyleSheet('color:#777;')
+        kw_layout.addWidget(self.cfg_path_label)
 
         kw_layout.addWidget(QLabel('姓名识别区域（左,上,右,下，占屏幕比例；默认已适配全屏 BOSS，一般不用改）'))
         self.region_edit = QLineEdit()
